@@ -81,29 +81,50 @@ def init_session_state():
 init_session_state()
 
 # Helper para inputs de moneda con formato
+def update_currency(state_key, widget_key):
+    """Callback para actualizar el estado numérico desde el input de texto formateado."""
+    val_str = st.session_state[widget_key]
+    try:
+        clean_val = val_str.replace(',', '')
+        st.session_state[state_key] = float(clean_val)
+    except ValueError:
+        pass # Si falla la conversión, no actualizamos el estado numérico (se revertirá en el siguiente render)
+
 def currency_input(label, state_key):
-    # Recuperar valor actual
-    current_val = st.session_state[state_key]
-    
-    # Clave para el widget de texto
+    # Clave única para el widget de texto
     widget_key = f"{state_key}_txt"
     
-    # Forzar el formato en el widget
-    st.session_state[widget_key] = f"{current_val:,.2f}"
+    # Si el widget aún no existe en el estado o no coincide con el valor numérico actual (ej. cambio externo),
+    # inicializamos el valor del widget formateado.
+    # Usamos el valor numérico actual de la fuente de la verdad (state_key)
+    current_numeric_val = st.session_state[state_key]
+    formatted_val = f"{current_numeric_val:,.2f}"
     
-    # Renderizar input
-    val_str = st.text_input(label, key=widget_key)
+    # Inicializar el widget en session_state si no existe, para que tenga un valor por defecto
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = formatted_val
     
-    # Intentar parsear y actualizar estado
-    try:
-        # Remover comas y convertir a float
-        clean_val = val_str.replace(',', '')
-        new_val = float(clean_val)
-        st.session_state[state_key] = new_val
-        return new_val
-    except ValueError:
-        # Si falla, mantener valor anterior (o manejar error visualmente)
-        return current_val
+    # Sin embargo, para asegurar que refleje cambios externos o reinicios, 
+    # verificamos si el valor parseado del widget coincide con el state numérico.
+    # Si no coinciden (y no estamos justo en medio de un evento de edición de este widget), sincronizamos.
+    # Una forma simple en Streamlit es simplemente pasar 'value' al text_input.
+    # Pero 'value' y 'key' juntos en text_input lanzan warning si modificamos state[key] manualmente.
+    # La mejor forma es dejar que el widget maneje su estado visual y solo forzarlo si cambia el numérico subyacente.
+    
+    # Enfoque simplificado: Usar on_change para actualizar el numérico.
+    # Y reconstruir el widget en cada pasada con el valor formateado del numérico ACTUAL.
+    # Esto sobreescribe lo que el usuario escribe SI Streamlit re-ejecuta, pero como es on_change, 
+    # la re-ejecución ocurre DESPUÉS de capturar el input.
+    
+    st.text_input(
+        label,
+        value=formatted_val,
+        key=widget_key,
+        on_change=update_currency,
+        args=(state_key, widget_key)
+    )
+    
+    return st.session_state[state_key]
 
 # --- 3. Panel de Control (Sidebar) ---
 with st.sidebar:
@@ -116,21 +137,30 @@ with st.sidebar:
         hard_costs = currency_input("Hard Costs ($)", "hard_costs")
         
         contingency_pct = st.slider("Contingencia (%)", 0.0, 20.0, st.session_state.contingency_pct, key="contingency_pct_input")
+        # Actualizar state manualmente para slider (aunque key lo hace, explicitud para variables locales)
+        st.session_state.contingency_pct = contingency_pct
         
         soft_costs = currency_input("Soft Costs ($)", "soft_costs")
         interest_cost = currency_input("Intereses/Financiamiento ($)", "interest_cost")
         
         st.subheader("Variables de Venta")
         units = st.number_input("Unidades", min_value=1, value=st.session_state.units, step=1, key="units_input")
-        # Mantenemos slider para target_price pero ajustamos formato visual si es posible, o lo dejamos como slider
-        # El usuario pidió "variables... que lo requieran". El slider es útil.
+        st.session_state.units = units
+        
+        # Mantenemos slider para target_price
         target_price = st.slider("Precio de Venta Target (Unitario) ($)", 0.0, 1000000.0, st.session_state.target_price, step=1000.0, format="$%d", key="target_price_input")
+        st.session_state.target_price = target_price
+        
         commission_pct = st.number_input("Comisión de Venta (%)", 0.0, 20.0, st.session_state.commission_pct, step=0.5, key="commission_pct_input")
+        st.session_state.commission_pct = commission_pct
 
     with st.expander("B. Estructura de Capital", expanded=True):
         investor_capital = currency_input("Capital Solicitado ($)", "investor_capital")
         investor_roi_target = st.number_input("Tasa ROI Ofrecida (% Anual)", min_value=0.0, value=st.session_state.investor_roi_target, step=0.1, key="investor_roi_target_input")
+        st.session_state.investor_roi_target = investor_roi_target
+        
         project_duration = st.number_input("Duración del Proyecto (Meses)", min_value=1, value=st.session_state.project_duration, step=1, key="project_duration_input")
+        st.session_state.project_duration = project_duration
 
     with st.expander("C. Comparables de Mercado (CMA)", expanded=True):
         st.text("Testigos / Comparables")
@@ -146,21 +176,19 @@ with st.sidebar:
         with c3_col1: st.session_state.comp_3_name = st.text_input("Comp 3 Dirección", st.session_state.comp_3_name, key="c3_name")
         with c3_col2: st.session_state.comp_3_price = currency_input("Precio ($)", "comp_3_price")
 
-# Actualizar session_state (Para los inputs que no usan el helper currency_input directamente sobre el state)
-# Los currency_input YA actualizaron el state, pero units, contingency, target_price etc necesitan sincronizarse si cambiaron
-st.session_state.contingency_pct = contingency_pct
-st.session_state.target_price = target_price
-st.session_state.units = units
-st.session_state.commission_pct = commission_pct
-st.session_state.investor_roi_target = investor_roi_target
-st.session_state.project_duration = project_duration
-
 # Variables derivadas para cálculos (leemos del state para asegurar consistencia)
 land_cost = st.session_state.land_cost
 hard_costs = st.session_state.hard_costs
+contingency_pct = st.session_state.contingency_pct
 soft_costs = st.session_state.soft_costs
 interest_cost = st.session_state.interest_cost
+target_price = st.session_state.target_price
+units = st.session_state.units
+commission_pct = st.session_state.commission_pct
 investor_capital = st.session_state.investor_capital
+investor_roi_target = st.session_state.investor_roi_target
+project_duration = st.session_state.project_duration
+
 
 
 
