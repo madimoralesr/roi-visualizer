@@ -259,7 +259,7 @@ fig_waterfall.update_layout(
     title = "Flujo de Caja del Proyecto (Waterfall)",
     showlegend = False,
     height=500,
-    margin=dict(l=20, r=20, t=50, b=20)
+    margin=dict(l=20, r=20, t=100, b=20)
 )
 st.plotly_chart(fig_waterfall, use_container_width=True)
 
