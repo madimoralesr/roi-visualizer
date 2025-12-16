@@ -15,7 +15,7 @@ st.markdown("""
     <style>
     /* Colores Globales */
     :root {
-        --primary-color: #10B981; /* Emerald Green */
+        --primary-color: #059669; /* Emerald Green (Darker for Contrast) */
         --secondary-color: #64748B; /* Slate Grey */
         --alert-color: #EF4444; /* Burnt Orange/Red */
         --background-color: #FFFFFF;
@@ -35,11 +35,12 @@ st.markdown("""
         text-align: center;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         margin-bottom: 20px;
+        min-height: 150px; /* Asegura que todas las tarjetas tengan la misma altura */
     }
     .kpi-value {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #10B981;
+        color: #059669;
     }
     .kpi-label {
         font-size: 1rem;
@@ -86,11 +87,15 @@ def update_currency(state_key, widget_key):
     val_str = st.session_state[widget_key]
     try:
         clean_val = val_str.replace(',', '')
-        st.session_state[state_key] = float(clean_val)
+        val_float = float(clean_val)
+        if val_float < 0:
+            raise ValueError("Negative value")
+        st.session_state[state_key] = val_float
     except ValueError:
+        st.toast("⚠️ Valor inválido. Use números positivos.")
         pass # Si falla la conversión, no actualizamos el estado numérico (se revertirá en el siguiente render)
 
-def currency_input(label, state_key):
+def currency_input(label, state_key, help_text=None):
     # Clave única para el widget de texto
     widget_key = f"{state_key}_txt"
     
@@ -120,6 +125,7 @@ def currency_input(label, state_key):
         label,
         value=formatted_val,
         key=widget_key,
+        help=help_text,
         on_change=update_currency,
         args=(state_key, widget_key)
     )
@@ -130,17 +136,22 @@ def currency_input(label, state_key):
 with st.sidebar:
     st.header("🎛️ Panel de Control")
     
+    # Reset button
+    if st.button("🔄 Reiniciar Valores por Defecto"):
+        init_session_state()
+        st.experimental_rerun() # Force rerun to reflect default values
+    
     with st.expander("A. Variables del Proyecto", expanded=True):
         st.subheader("Costos de Desarrollo")
         # Reemplazo de number_input por currency_input
         land_cost = currency_input("Costo Terreno ($)", "land_cost")
-        hard_costs = currency_input("Hard Costs ($)", "hard_costs")
+        hard_costs = currency_input("Hard Costs ($)", "hard_costs", help_text="Costos directos de construcción: materiales, mano de obra, cimientos, estructura, acabados.")
         
         contingency_pct = st.slider("Contingencia (%)", 0.0, 20.0, st.session_state.contingency_pct, key="contingency_pct_input")
         # Actualizar state manualmente para slider (aunque key lo hace, explicitud para variables locales)
         st.session_state.contingency_pct = contingency_pct
         
-        soft_costs = currency_input("Soft Costs ($)", "soft_costs")
+        soft_costs = currency_input("Soft Costs ($)", "soft_costs", help_text="Costos indirectos: permisos, licencias, honorarios de arquitectos/ingenieros, estudios de suelo, marketing.")
         interest_cost = currency_input("Intereses/Financiamiento ($)", "interest_cost")
         
         st.subheader("Variables de Venta")
@@ -148,7 +159,14 @@ with st.sidebar:
         st.session_state.units = units
         
         # Mantenemos slider para target_price
-        target_price = st.slider("Precio de Venta Target (Unitario) ($)", 0.0, 1000000.0, st.session_state.target_price, step=1000.0, format="$%d", key="target_price_input")
+        target_price_options = list(range(0, 1001000, 1000))
+        target_price = st.select_slider(
+            "Precio de Venta Target (Unitario) ($)", 
+            options=target_price_options, 
+            value=int(st.session_state.target_price), 
+            format_func=lambda x: f"${x:,.0f}",
+            key="target_price_input"
+        )
         st.session_state.target_price = target_price
         
         commission_pct = st.number_input("Comisión de Venta (%)", 0.0, 20.0, st.session_state.commission_pct, step=0.5, key="commission_pct_input")
@@ -164,15 +182,15 @@ with st.sidebar:
 
     with st.expander("C. Comparables de Mercado (CMA)", expanded=True):
         st.text("Testigos / Comparables")
-        c1_col1, c1_col2 = st.columns([2, 1])
+        c1_col1, c1_col2 = st.columns([1.5, 1])
         with c1_col1: st.session_state.comp_1_name = st.text_input("Comp 1 Dirección", st.session_state.comp_1_name, key="c1_name")
         with c1_col2: st.session_state.comp_1_price = currency_input("Precio ($)", "comp_1_price")
         
-        c2_col1, c2_col2 = st.columns([2, 1])
+        c2_col1, c2_col2 = st.columns([1.5, 1])
         with c2_col1: st.session_state.comp_2_name = st.text_input("Comp 2 Dirección", st.session_state.comp_2_name, key="c2_name")
         with c2_col2: st.session_state.comp_2_price = currency_input("Precio ($)", "comp_2_price")
 
-        c3_col1, c3_col2 = st.columns([2, 1])
+        c3_col1, c3_col2 = st.columns([1.5, 1])
         with c3_col1: st.session_state.comp_3_name = st.text_input("Comp 3 Dirección", st.session_state.comp_3_name, key="c3_name")
         with c3_col2: st.session_state.comp_3_price = currency_input("Precio ($)", "comp_3_price")
 
@@ -197,7 +215,8 @@ st.markdown("---")
 
 # --- 4. Lógica de Negocio (Backend) ---
 # Cálculo de Costos
-hard_costs_total = hard_costs * (1 + contingency_pct / 100.0)
+contingency_amount = hard_costs * (contingency_pct / 100.0)
+hard_costs_total = hard_costs + contingency_amount
 total_project_cost = land_cost + hard_costs_total + soft_costs + interest_cost
 
 # Cálculo de Retornos e Ingresos
@@ -213,81 +232,51 @@ final_check_investor = investor_capital + investor_return
 
 # --- 5. Visualización de Datos (Dashboard Principal) ---
 
-# A. Sección 1: KPIs Financieros (Top Level)
-kpi1, kpi2, kpi3 = st.columns(3)
 
-with kpi1:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">Tasa Anual Efectiva (Inversionista)</div>
-        <div class="kpi-value">{investor_roi_target}%</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with kpi2:
-    profit_color = "negative" if developer_net_profit < 0 else ""
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">Ganancia Neta (Desarrollador)</div>
-        <div class="kpi-value {profit_color}">${developer_net_profit:,.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with kpi3:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">Cheque Final (Inversionista)</div>
-        <div class="kpi-value">${final_check_investor:,.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Alerta de Viabilidad
-if developer_net_profit < 0:
-    st.error("🚨 ALERTA: Proyecto No Viable. La utilidad del desarrollador es negativa. Revisa el precio de venta o los costos.")
 
 
 # B. Sección 2: Análisis de Rentabilidad y Costos
 st.subheader("Análisis de Rentabilidad y Estructura de Costos")
-col_charts_1, col_charts_2 = st.columns([2, 1])
 
-with col_charts_1:
-    # Waterfall Chart
-    fig_waterfall = go.Figure(go.Waterfall(
-        name = "20", orientation = "v",
-        measure = ["relative", "relative", "relative", "relative", "relative", "relative", "total"],
-        x = ["Ingreso Bruto", "Comisiones", "Terreno", "Construcción (Hard)", "Blandos/Financiero", "Retorno Inversionista", "Utilidad Desarrollador"],
-        textposition = "outside",
-        text = [f"${gross_income/1000:,.0f}k", f"-${sales_commission/1000:,.0f}k", f"-${land_cost/1000:,.0f}k", 
-                f"-${hard_costs_total/1000:,.0f}k", f"-${(soft_costs+interest_cost)/1000:,.0f}k", 
-                f"-${investor_return/1000:,.0f}k", f"${developer_net_profit/1000:,.0f}k"],
-        y = [gross_income, -sales_commission, -land_cost, -hard_costs_total, -(soft_costs + interest_cost), -investor_return, developer_net_profit],
-        connector = {"line":{"color":"rgb(63, 63, 63)"}},
-        increasing = {"marker":{"color":"#10B981"}}, # Emerald Green
-        decreasing = {"marker":{"color":"#EF4444"}}, # Red/Orange
-        totals = {"marker":{"color":"#10B981" if developer_net_profit >= 0 else "#EF4444"}}
-    ))
+# Waterfall Chart
+fig_waterfall = go.Figure(go.Waterfall(
+    name = "20", orientation = "v",
+    measure = ["relative", "relative", "relative", "relative", "relative", "relative", "relative", "total"],
+    x = ["Ingreso Bruto", "Comisiones", "Terreno", "Construcción (Hard)", "Contingencia", "Blandos/Financiero", "Retorno Inversionista", "Utilidad Desarrollador"],
+    textposition = "auto",
+    cliponaxis=False,
+    text = [f"${gross_income/1000:,.0f}k", f"-${sales_commission/1000:,.0f}k", f"-${land_cost/1000:,.0f}k", 
+            f"-${hard_costs/1000:,.0f}k", f"-${contingency_amount/1000:,.0f}k", f"-${(soft_costs+interest_cost)/1000:,.0f}k", 
+            f"-${investor_return/1000:,.0f}k", f"${developer_net_profit/1000:,.0f}k"],
+    y = [gross_income, -sales_commission, -land_cost, -hard_costs, -contingency_amount, -(soft_costs + interest_cost), -investor_return, developer_net_profit],
+    connector = {"line":{"color":"rgb(63, 63, 63)"}},
+    increasing = {"marker":{"color":"#059669"}}, # Emerald Green
+    decreasing = {"marker":{"color":"#EF4444"}}, # Red/Orange
+    totals = {"marker":{"color":"#059669" if developer_net_profit >= 0 else "#EF4444"}}
+))
 
-    fig_waterfall.update_layout(
-        title = "Flujo de Caja del Proyecto (Waterfall)",
-        showlegend = False,
-        height=450
-    )
-    st.plotly_chart(fig_waterfall, use_container_width=True)
+fig_waterfall.update_layout(
+    title = "Flujo de Caja del Proyecto (Waterfall)",
+    showlegend = False,
+    height=500,
+    margin=dict(l=20, r=20, t=50, b=20)
+)
+st.plotly_chart(fig_waterfall, use_container_width=True)
 
-with col_charts_2:
-    # Donut Chart - Desglose de Costos (Salidas de dinero antes de utilidad)
-    # Agrupamos Costos de Proyecto + Comisiones + Retorno Inversionista
-    labels = ['Terreno', 'Construcción', 'Blandos', 'Financiero', 'Comisiones', 'Retorno Inv.']
-    values = [land_cost, hard_costs_total, soft_costs, interest_cost, sales_commission, investor_return]
-    
-    fig_donut = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4,
-                                        hovertemplate="<b>%{label}</b><br>%{value:,.0f} (%{percent})<extra></extra>")])
-    fig_donut.update_layout(
-        title="Estructura de Egresos",
-        height=450,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
-    )
-    st.plotly_chart(fig_donut, use_container_width=True)
+# Donut Chart - Desglose de Costos (Salidas de dinero antes de utilidad)
+# Agrupamos Costos de Proyecto + Comisiones + Retorno Inversionista
+labels = ['Terreno', 'Construcción', 'Contingencia', 'Blandos', 'Financiero', 'Comisiones', 'Retorno Inv.']
+values = [land_cost, hard_costs, contingency_amount, soft_costs, interest_cost, sales_commission, investor_return]
+
+fig_donut = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4,
+                                    hovertemplate="<b>%{label}</b><br>%{value:,.0f} (%{percent})<extra></extra>")])
+fig_donut.update_layout(
+    title="Estructura de Egresos",
+    height=600,
+    legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.05),
+    margin=dict(l=20, r=150, t=50, b=20)
+)
+st.plotly_chart(fig_donut, use_container_width=True)
 
 
 # C. Sección 3: Validación de Mercado (Comparables)
@@ -324,3 +313,38 @@ fig_comps.update_layout(
 )
 
 st.plotly_chart(fig_comps, use_container_width=True)
+
+
+# A. Sección 1: KPIs Financieros (Top Level)
+st.markdown("---")
+st.subheader("Resumen de Inversión / Datos Clave")
+kpi1, kpi2, kpi3 = st.columns(3)
+
+with kpi1:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-label">Tasa Anual Efectiva (Inversionista)</div>
+        <div class="kpi-value">{investor_roi_target}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi2:
+    profit_color = "negative" if developer_net_profit < 0 else ""
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-label">Ganancia Neta (Desarrollador)</div>
+        <div class="kpi-value {profit_color}">${developer_net_profit:,.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi3:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-label">Cheque Final (Inversionista)</div>
+        <div class="kpi-value">${final_check_investor:,.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Alerta de Viabilidad
+if developer_net_profit < 0:
+    st.error("🚨 ALERTA: Proyecto No Viable. La utilidad del desarrollador es negativa. Revisa el precio de venta o los costos.")
