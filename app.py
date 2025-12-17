@@ -1,6 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+import math
 
 # --- 1. Configuración de Página & Estilos ---
 st.set_page_config(
@@ -100,19 +101,19 @@ st.markdown("""
 # --- 2. Inicialización de Session State ---
 def init_session_state():
     defaults = {
-        "land_cost": 100000.0,
-        "hard_costs": 150000.0,
-        "contingency_pct": 5.0,
-        "soft_costs": 20000.0,
+        "land_cost": 8000.0,
+        "hard_costs": 120000.0,
+        "contingency_pct": 10.0,
+        "soft_costs": 117000.0,
         "hm_interest_rate": 10.0, 
-        "hml_ltc_pct": 85.0, # Nuevo default 85%
+        "hml_ltc_pct": 85.0,
         "hml_origination_pct": 1.5,
         "hml_other_fee_pct": 2.0,
-        "hml_duration": 6, # Nuevo default 6 meses
+        "hml_duration": 6,
         "target_price": 450000.0,
         "units": 1,
         "commission_pct": 6.0,
-        "investor_capital": 100000.0,
+        "investor_capital": 42000.0,
         "investor_roi_target": 12.0,
         "project_duration": 12,
         "comp_1_name": "Propiedad A",
@@ -161,6 +162,14 @@ def currency_input(label, state_key, key_suffix="", help_text=None):
 st.markdown('<div class="hero-header">Real Estate ROI Visualizer</div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-subheader">Simulador de Rentabilidad y Análisis Financiero</div>', unsafe_allow_html=True)
 
+# Reset Button
+c_reset1, c_reset2, c_reset3 = st.columns([1.2, 0.6, 1.2]) 
+with c_reset2:
+    if st.button("🔄 Reiniciar Valores"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.experimental_rerun()
+
 # --- SECCIÓN 1: COSTOS DE DESARROLLO ---
 st.markdown('<div class="section-header">1. Costos de Desarrollo</div>', unsafe_allow_html=True)
 
@@ -180,7 +189,6 @@ with cost_col1:
 
 with cost_col2:
     soft_costs = currency_input("Soft Costs ($)", "soft_costs", "dev")
-    # Financiamiento HM Lender REMOVED from here
 
 # --- SECCIÓN 2: PRÉSTAMO HM LENDER ---
 st.markdown('<div class="section-header">2. Préstamo HM Lender</div>', unsafe_allow_html=True)
@@ -188,13 +196,8 @@ st.markdown('<div class="section-header">2. Préstamo HM Lender</div>', unsafe_a
 hml_col1, hml_col2 = st.columns(2, gap="large")
 
 with hml_col1:
-    # Base calculation: Hard + Soft
-    hml_base_amt = hard_costs + soft_costs # Note: Contingency not included per prompt "suma de hardcost y soft cost"? Or Hard includes cont? Usually Hard+Cont.
-    # Prompt said "suma de los hardcost y soft cost". I will stick to that literally for the base, but normally Contingency is part of Hard Budget.
-    # Let's assume Base = Hard (raw) + Soft. 
-    # BUT, to be safe for a loan, usually it's LTC on Total Cost.
-    # Given the prompt specificity: "suma de los hardcost y soft cost".
-
+    # Base calculation: Land + Hard + Contingency
+    hml_base_amt = land_cost + hard_costs + contingency_amt
     
     ltc_pct = st.number_input("Porcentaje del Préstamo Otorgado (%)", 0.0, 100.0, st.session_state.hml_ltc_pct, step=1.0, key="hml_ltc_input")
     st.session_state.hml_ltc_pct = ltc_pct
@@ -219,6 +222,7 @@ with hml_col2:
     hml_orig_amt = loan_principal * (orig_pct / 100.0)
     hml_mort_exp_amt = loan_principal * (mort_exp_pct / 100.0)
     hml_interest_total = loan_principal * (hm_rate / 100.0) * (hml_duration / 12.0)
+    hml_fees_total = hml_orig_amt + hml_mort_exp_amt
     
     st.markdown(f"""
         <div style="background-color: #F1F5F9; padding: 10px; border-radius: 8px; font-size: 0.9rem; color: #475569;">
@@ -228,12 +232,33 @@ with hml_col2:
         </div>
     """, unsafe_allow_html=True)
 
+# --- SECCIÓN 3: PRÉSTAMO PML ---
+st.markdown('<div class="section-header">3. Préstamo PML</div>', unsafe_allow_html=True)
 
-# --- SECCIÓN 3: VARIABLES DE VENTA ---
-st.markdown('<div class="section-header">3. Variables de Venta</div>', unsafe_allow_html=True)
+pml_input_c1, pml_input_c2 = st.columns(2, gap="large")
 
-# Flattened layout: 4 columns to avoid nesting
-# Col 1: Units, Col 2: Price, Col 3: Comm %, Col 4: Total Result
+with pml_input_c1:
+    # Capital Solicitado (Derived)
+    calculated_investor_capital = math.ceil(((hml_base_amt - loan_principal) + soft_costs) / 1000) * 1000
+    st.session_state.investor_capital = calculated_investor_capital
+    st.markdown(f"""
+    <div class="kpi-card" style="padding: 1rem; margin-bottom: 20px;">
+        <div class="kpi-label">Capital Solicitado al PML</div>
+        <div class="kpi-value">${calculated_investor_capital:,.0f}</div>
+        <div style="font-size:0.8rem; color:#64748B">(Restante del proyecto + Soft Costs)</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with pml_input_c2:
+    inv_roi = st.number_input("Retorno Ofrecido (ROI %)", 0.0, 100.0, st.session_state.investor_roi_target, step=0.5, key="inv_roi_inp")
+    st.session_state.investor_roi_target = inv_roi
+    
+    duration = st.number_input("Duración Proyecto (Meses)", 1, 60, st.session_state.project_duration, key="dur_inp")
+    st.session_state.project_duration = duration
+
+# --- SECCIÓN 4: VARIABLES DE VENTA ---
+st.markdown('<div class="section-header">4. Variables de Venta</div>', unsafe_allow_html=True)
+
 sale_c1, sale_c2, sale_c3, sale_c4 = st.columns([1, 1, 1, 1.2], gap="small")
 
 with sale_c1:
@@ -244,12 +269,10 @@ with sale_c2:
     target_price = currency_input("Precio Unitario ($)", "target_price", "sale")
 
 with sale_c3:
-    # Updated Label
     comm_pct = st.number_input("Comisión Realtor + Closing Cost (%)", 0.0, 15.0, st.session_state.commission_pct, step=0.5, key="comm_pct_inp")
     st.session_state.commission_pct = comm_pct
 
 with sale_c4:
-    # Display de Comisión Total
     total_sales_vol = units * target_price
     total_commissions = total_sales_vol * (comm_pct / 100.0)
     st.markdown(f"""
@@ -259,13 +282,11 @@ with sale_c4:
     </div>
     """, unsafe_allow_html=True)
 
-# --- SECCIÓN 4: COMPARABLES (CMA) ---
-st.markdown('<div class="section-header">4. Comparables de Mercado (CMA)</div>', unsafe_allow_html=True)
+# --- SECCIÓN 5: COMPARABLES (CMA) ---
+st.markdown('<div class="section-header">5. Comparables de Mercado (CMA)</div>', unsafe_allow_html=True)
 
 st.caption("Ingrese 3 propiedades testigo:")
 
-# Responsive Layout: 3 Columns, each containing Address AND Price
-# Desktop: Side-by-side columns. Mobile: Stacks Col 1 (Addr1, Price1), then Col 2...
 comp_c1, comp_c2, comp_c3 = st.columns(3, gap="small")
 
 with comp_c1:
@@ -280,8 +301,7 @@ with comp_c3:
     st.session_state.comp_3_name = st.text_input("Dirección #3", st.session_state.comp_3_name, key="addr_3_input_cma", placeholder="Dirección 3")
     st.session_state.comp_3_price = currency_input("Precio #3 ($)", "comp_3_price", "cma_3_inline")
 
-# Full Width Chart
-st.markdown("<br>", unsafe_allow_html=True) # Spacer
+st.markdown("<br>", unsafe_allow_html=True)
 comp_names = [st.session_state.comp_1_name, st.session_state.comp_2_name, st.session_state.comp_3_name, "Proyecto"]
 comp_vals = [st.session_state.comp_1_price, st.session_state.comp_2_price, st.session_state.comp_3_price, target_price]
 colors = ['#94A3B8', '#94A3B8', '#94A3B8', '#059669']
@@ -296,143 +316,114 @@ fig_comps = go.Figure(data=[go.Bar(
 fig_comps.update_layout(
     title="Validación de Mercado",
     margin=dict(l=20, r=20, t=30, b=20),
-    height=350, # Slightly taller for full width
+    height=350,
     paper_bgcolor='rgba(0,0,0,0)',
     plot_bgcolor='rgba(0,0,0,0)'
 )
 st.plotly_chart(fig_comps, use_container_width=True)
 
 
-# --- SECCIÓN 5: PRIVATE MONEY LENDER (PML) ---
-st.markdown('<div class="section-header">5. Análisis Financiero (PML)</div>', unsafe_allow_html=True)
+# --- SECCIÓN 6: ANÁLISIS FINANCIERO Y RESUMEN ---
+st.markdown('<div class="section-header">6. Análisis Financiero y Resumen</div>', unsafe_allow_html=True)
 
-# Inputs del PML
-pml_inputs_col, pml_charts_col = st.columns([1, 2], gap="large")
+# Final Calculations
+gross_income = units * target_price
+sales_comm_total = gross_income * (comm_pct / 100.0)
+investor_return_amt = st.session_state.investor_capital * (inv_roi / 100.0) * (duration / 12.0)
 
-with pml_inputs_col:
-    inv_capital = currency_input("Capital Solicitado ($)", "investor_capital", "pml")
-    inv_roi = st.number_input("Retorno Ofrecido (ROI %)", 0.0, 100.0, st.session_state.investor_roi_target, step=0.5, key="inv_roi_inp")
-    st.session_state.investor_roi_target = inv_roi
-    
-    duration = st.number_input("Duración Proyecto (Meses)", 1, 60, st.session_state.project_duration, key="dur_inp")
-    st.session_state.project_duration = duration
+total_hard = hard_costs + contingency_amt
+total_project_costs = (
+    land_cost + 
+    total_hard + 
+    soft_costs + 
+    investor_return_amt + 
+    hml_fees_total + 
+    hml_interest_total + 
+    sales_comm_total
+)
 
-    # CÁLCULOS FINALES (Recalculating HML values for scope)
-    # HML Calculations
-    hml_base = hard_costs + soft_costs
-    loan_principal = hml_base * (st.session_state.hml_ltc_pct / 100.0)
-    hml_orig_amt = loan_principal * (st.session_state.hml_origination_pct / 100.0)
-    hml_mort_exp_amt = loan_principal * (st.session_state.hml_other_fee_pct / 100.0)
-    hml_fees_total = hml_orig_amt + hml_mort_exp_amt
-    # Interest based on HML Duration, not Project Duration
-    hml_interest_total = loan_principal * (st.session_state.hm_interest_rate / 100.0) * (st.session_state.hml_duration / 12.0)
-    
-    # Project Totals
-    total_hard = hard_costs + contingency_amt
-    total_project_costs = land_cost + total_hard + soft_costs + hml_interest_total + hml_fees_total
-    
-    gross_income = units * target_price
-    sales_comm_total = gross_income * (comm_pct / 100.0)
-    investor_return_amt = inv_capital * (inv_roi / 100.0) * (duration / 12.0)
-    
-    developer_profit = gross_income - total_project_costs - sales_comm_total - investor_return_amt
-    
-with pml_charts_col:
-    # TABS para visualización
-    tab1, tab2 = st.tabs(["📊 Waterfall (Flujo)", "🍩 Estructura de Costos"])
-    
-    with tab1:
-        # Waterfall
-        fig_waterfall = go.Figure(go.Waterfall(
-            orientation = "v",
-            measure = ["relative", "relative", "relative", "relative", "relative", "relative", "relative", "relative", "relative", "total"],
-            x = ["Ventas", "Comisión", "Terreno", "Hard+Cont", "Soft", "Fees HML", "Interés HM", "Retorno INV", "Utilidad DEV"],
-            textposition = "outside",
-            text = [f"${gross_income/1000:,.0f}k", f"-${sales_comm_total/1000:,.0f}k", f"-${land_cost/1000:,.0f}k", 
-                    f"-${total_hard/1000:,.0f}k", f"-${soft_costs/1000:,.0f}k", f"-${hml_fees_total/1000:,.0f}k", f"-${hml_interest_total/1000:,.0f}k",
-                    f"-${investor_return_amt/1000:,.0f}k", f"${developer_profit/1000:,.0f}k"],
-            y = [gross_income, -sales_comm_total, -land_cost, -total_hard, -soft_costs, -hml_fees_total, -hml_interest_total, -investor_return_amt, developer_profit],
-            connector = {"line":{"color":"rgb(63, 63, 63)"}},
-            increasing = {"marker":{"color":"#059669"}},
-            decreasing = {"marker":{"color":"#EF4444"}},
-            totals = {"marker":{"color":"#334155"}}
-        ))
-        fig_waterfall.update_layout(
-            height=400, 
-            margin=dict(t=30,b=0,l=0,r=0),
-            paper_bgcolor='rgba(0,0,0,0)', # Keep transparent
-            plot_bgcolor='rgba(0,0,0,0)' # Keep transparent
-        )
-        st.plotly_chart(fig_waterfall, use_container_width=True)
-        
-    with tab2:
-        # Donut Chart
-        labels = ['Terreno', 'Hard + Cont.', 'Soft Costs', 'Fees HML', 'Intereses HM', 'Comisiones', 'Retorno Inv.', 'Utilidad Dev.']
-        values = [land_cost, total_hard, soft_costs, hml_fees_total, hml_interest_total, sales_comm_total, investor_return_amt, max(0, developer_profit)]
-        
-        fig_donut = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5)])
-        fig_donut.update_layout(
-            height=400, 
-            margin=dict(t=30,b=0,l=0,r=0),
-            paper_bgcolor='rgba(0,0,0,0)', # Keep transparent
-            plot_bgcolor='rgba(0,0,0,0)' # Keep transparent
-        )
-        st.plotly_chart(fig_donut, use_container_width=True)
+developer_profit = gross_income - total_project_costs
 
-# --- RESUMEN FINAL DEL PROYECTO (KPI CARDS) ---
+# Charts
+tab1, tab2 = st.tabs(["📊 Waterfall (Flujo)", "🍩 Estructura de Costos"])
+
+with tab1:
+    fig_waterfall = go.Figure(go.Waterfall(
+        orientation = "v",
+        measure = ["relative", "relative", "relative", "relative", "relative", "relative", "relative", "relative", "relative", "total"],
+        x = ["Ventas", "Comisión", "Terreno", "Hard+Cont", "Soft", "Fees HML", "Interés HM", "Retorno INV", "Utilidad DEV"],
+        textposition = "outside",
+        text = [f"${gross_income/1000:,.0f}k", f"-${sales_comm_total/1000:,.0f}k", f"-${land_cost/1000:,.0f}k", 
+                f"-${total_hard/1000:,.0f}k", f"-${soft_costs/1000:,.0f}k", f"-${hml_fees_total/1000:,.0f}k", f"-${hml_interest_total/1000:,.0f}k",
+                f"-${investor_return_amt/1000:,.0f}k", f"${developer_profit/1000:,.0f}k"],
+        y = [gross_income, -sales_comm_total, -land_cost, -total_hard, -soft_costs, -hml_fees_total, -hml_interest_total, -investor_return_amt, developer_profit],
+        connector = {"line":{"color":"rgb(63, 63, 63)"}},
+        increasing = {"marker":{"color":"#059669"}},
+        decreasing = {"marker":{"color":"#EF4444"}},
+        totals = {"marker":{"color":"#334155"}}
+    ))
+    fig_waterfall.update_layout(
+        height=400, 
+        margin=dict(t=30,b=0,l=0,r=0),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_waterfall, use_container_width=True)
+    
+with tab2:
+    labels = ['Terreno', 'Hard + Cont.', 'Soft Costs', 'Fees HML', 'Intereses HM', 'Comisiones', 'Retorno Inv.', 'Utilidad Dev.']
+    values = [land_cost, total_hard, soft_costs, hml_fees_total, hml_interest_total, sales_comm_total, investor_return_amt, max(0, developer_profit)]
+    
+    fig_donut = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5)])
+    fig_donut.update_layout(
+        height=400, 
+        margin=dict(t=30,b=0,l=0,r=0),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+# --- KPI CARDS FINALES ---
 st.markdown("---")
 st.markdown('<div class="section-header" style="color: #F8FAFC;">Resumen Final del Proyecto</div>', unsafe_allow_html=True)
-st.markdown("") # Spacer
+st.caption(f"💡 El plazo de la inversión es a **{duration} meses** y se actualiza si se cambia en la sección 'Préstamo PML'.")
+st.markdown("")
 
-final_kpi_row1_col1, final_kpi_row1_col2, final_kpi_row1_col3 = st.columns(3, gap="medium")
+# Row 1: Precio de Venta, Costo Total Proyecto
+res_r1_c1, res_r1_c2 = st.columns(2, gap="medium")
 
-with final_kpi_row1_col1:
+with res_r1_c1:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Inversión Total Proyecto</div>
-        <div class="kpi-value">${total_project_costs:,.0f}</div>
-    </div>""", unsafe_allow_html=True)
-
-with final_kpi_row1_col2:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">Ingresos por Ventas</div>
+        <div class="kpi-label">Precio de Venta</div>
         <div class="kpi-value">${gross_income:,.0f}</div>
     </div>""", unsafe_allow_html=True)
 
-with final_kpi_row1_col3:
+with res_r1_c2:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Plazo Estimado</div>
-        <div class="kpi-value" style="color:#3B82F6">{duration} Meses</div>
+        <div class="kpi-label">Costo Total del Proyecto</div>
+        <div class="kpi-value">${total_project_costs:,.0f}</div>
     </div>""", unsafe_allow_html=True)
 
-final_kpi_row2_col1, final_kpi_row2_col2, final_kpi_row2_col3 = st.columns(3, gap="medium") 
+# Row 2: Total a Devolver Inv, Ganancia Desarrollador
+res_r2_c1, res_r2_c2 = st.columns(2, gap="medium")
 
-with final_kpi_row2_col1:
+with res_r2_c1:
+    total_inv_payout = st.session_state.investor_capital + investor_return_amt
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Retorno Inversionista</div>
-        <div class="kpi-value">${investor_return_amt:,.0f}</div>
-        <div style="font-size:0.8rem; color:#64748B">({inv_roi}% Anual)</div>
+        <div class="kpi-label">Total a Devolver al Inversionista Privado</div>
+        <div class="kpi-value">${total_inv_payout:,.0f}</div>
+        <div style="font-size:0.8rem; color:#64748B">(Capital + Retorno)</div>
     </div>""", unsafe_allow_html=True)
 
-with final_kpi_row2_col2:
+with res_r2_c2:
     color = "#059669" if developer_profit > 0 else "#EF4444"
     dev_margin = (developer_profit / gross_income * 100) if gross_income else 0
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Utilidad Desarrollador</div>
+        <div class="kpi-label">Ganancia del Desarrollador</div>
         <div class="kpi-value" style="color:{color}">${developer_profit:,.0f}</div>
         <div style="font-size:0.8rem; color:#64748B">({dev_margin:.1f}% Margen)</div>
-    </div>""", unsafe_allow_html=True)
-
-with final_kpi_row2_col3: 
-    # Total HML Payment = Principal + Origination + Fees + Interest
-    total_hml_payment = loan_principal + hml_fees_total + hml_interest_total
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">Total a Pagar HML</div>
-        <div class="kpi-value">${total_hml_payment:,.0f}</div>
-        <div style="font-size:0.8rem; color:#64748B">({st.session_state.hm_interest_rate}% Anual)</div>
     </div>""", unsafe_allow_html=True)
