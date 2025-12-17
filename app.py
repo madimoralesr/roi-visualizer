@@ -239,13 +239,14 @@ pml_input_c1, pml_input_c2 = st.columns(2, gap="large")
 
 with pml_input_c1:
     # Capital Solicitado (Derived)
+    hml_gap = hml_base_amt - loan_principal
     calculated_investor_capital = math.ceil(((hml_base_amt - loan_principal) + soft_costs) / 1000) * 1000
     st.session_state.investor_capital = calculated_investor_capital
     st.markdown(f"""
     <div class="kpi-card" style="padding: 1rem; margin-bottom: 20px;">
         <div class="kpi-label">Capital Solicitado al PML</div>
         <div class="kpi-value">${calculated_investor_capital:,.0f}</div>
-        <div style="font-size:0.8rem; color:#64748B">(Restante del proyecto + Soft Costs)</div>
+        <div style="font-size:0.8rem; color:#64748B">(Gap: ${hml_gap:,.0f} + Soft: ${soft_costs:,.0f})</div>
     </div>
     """, unsafe_allow_html=True)
 
