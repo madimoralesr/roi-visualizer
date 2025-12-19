@@ -205,7 +205,7 @@ with hml_col1:
     loan_principal = hml_base_amt * (ltc_pct / 100.0)
     st.markdown(f"<div class='calc-box'>Monto del Préstamo: ${loan_principal:,.2f}</div>", unsafe_allow_html=True)
 
-    hml_duration = st.number_input("Duración Préstamo (Meses)", 1, 60, st.session_state.hml_duration, key="hml_dur_inp")
+    hml_duration = st.number_input("Duración Préstamo (Meses)", 1.0, 60.0, float(st.session_state.hml_duration), step=1.0, key="hml_dur_inp")
     st.session_state.hml_duration = hml_duration
 
 with hml_col2:
@@ -240,13 +240,13 @@ pml_input_c1, pml_input_c2 = st.columns(2, gap="large")
 with pml_input_c1:
     # Capital Solicitado (Derived)
     hml_gap = hml_base_amt - loan_principal
-    calculated_investor_capital = math.ceil(((hml_base_amt - loan_principal) + soft_costs) / 1000) * 1000
+    calculated_investor_capital = math.ceil((hml_base_amt - loan_principal) / 1000) * 1000
     st.session_state.investor_capital = calculated_investor_capital
     st.markdown(f"""
     <div class="kpi-card" style="padding: 1rem; margin-bottom: 20px;">
         <div class="kpi-label">Capital Solicitado al PML</div>
-        <div class="kpi-value">${calculated_investor_capital:,.0f}</div>
-        <div style="font-size:0.8rem; color:#64748B">(Gap: ${hml_gap:,.0f} + Soft: ${soft_costs:,.0f})</div>
+        <div class="kpi-value">${calculated_investor_capital:,.2f}</div>
+        <div style="font-size:0.8rem; color:#64748B">(Gap del Hard Money)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -254,7 +254,7 @@ with pml_input_c2:
     inv_roi = st.number_input("Retorno Ofrecido (ROI %)", 0.0, 100.0, st.session_state.investor_roi_target, step=0.5, key="inv_roi_inp")
     st.session_state.investor_roi_target = inv_roi
     
-    duration = st.number_input("Duración Proyecto (Meses)", 1, 60, st.session_state.project_duration, key="dur_inp")
+    duration = st.number_input("Duración Proyecto (Meses)", 1.0, 60.0, float(st.session_state.project_duration), step=1.0, key="dur_inp")
     st.session_state.project_duration = duration
 
 # --- SECCIÓN 4: VARIABLES DE VENTA ---
@@ -279,7 +279,7 @@ with sale_c4:
     st.markdown(f"""
     <div class="kpi-card" style="background-color: #FFF7ED; border-color: #FFEDD5; padding: 1rem;">
         <div class="kpi-label" style="color: #C2410C; font-size: 0.8rem;">Total Comisiones</div>
-        <div class="kpi-value" style="color: #EA580C; font-size: 1.4rem;">${total_commissions:,.0f}</div>
+        <div class="kpi-value" style="color: #EA580C; font-size: 1.4rem;">${total_commissions:,.2f}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -397,14 +397,14 @@ with res_r1_c1:
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">Precio de Venta</div>
-        <div class="kpi-value">${gross_income:,.0f}</div>
+        <div class="kpi-value">${gross_income:,.2f}</div>
     </div>""", unsafe_allow_html=True)
 
 with res_r1_c2:
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">Costo Total del Proyecto</div>
-        <div class="kpi-value">${total_project_costs:,.0f}</div>
+        <div class="kpi-value">${total_project_costs:,.2f}</div>
     </div>""", unsafe_allow_html=True)
 
 # Row 2: Total a Devolver Inv, Ganancia Desarrollador
@@ -415,7 +415,7 @@ with res_r2_c1:
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">Total a Devolver al Inversionista Privado</div>
-        <div class="kpi-value">${total_inv_payout:,.0f}</div>
+        <div class="kpi-value">${total_inv_payout:,.2f}</div>
         <div style="font-size:0.8rem; color:#64748B">(Capital + Retorno)</div>
     </div>""", unsafe_allow_html=True)
 
@@ -424,7 +424,13 @@ with res_r2_c2:
     dev_margin = (developer_profit / gross_income * 100) if gross_income else 0
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Ganancia del Desarrollador</div>
-        <div class="kpi-value" style="color:{color}">${developer_profit:,.0f}</div>
+        <div class="kpi-label">Ganancia del Proyecto</div>
+        <div class="kpi-value" style="color:{color}">${developer_profit:,.2f}</div>
         <div style="font-size:0.8rem; color:#64748B">({dev_margin:.1f}% Margen)</div>
     </div>""", unsafe_allow_html=True)
+
+# Mensaje de Rentabilidad
+if developer_profit > 0:
+    st.success(f"✅ **El proyecto es RENTABLE.** Genera una utilidad de ${developer_profit:,.2f}.")
+else:
+    st.error(f"⚠️ **El proyecto NO es rentable.** Genera una pérdida de ${abs(developer_profit):,.2f}.")
