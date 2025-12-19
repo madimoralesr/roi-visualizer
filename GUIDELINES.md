@@ -30,8 +30,8 @@ The application is a "One Page" layout divided into 6 logical sections:
     *   `HML Interest Total` = Principal * Annual Rate * (Duration / 12).
 
 ### 3. Préstamo PML (Private Money Lender)
-*   **Capital Solicitado (Calculated):** Automatically derived as the funding gap.
-    *   Formula: `(HML Base Amount - HML Loan Principal) + Soft Costs`.
+*   **Capital Solicitado (Calculated):** Automatically derived as the **Hard Money Gap only**.
+    *   Formula: `HML Base Amount - HML Loan Principal`.
     *   *Note:* Rounded up to the nearest $1,000.
 *   **Inputs:**
     *   Retorno Ofrecido (ROI % Anual).
@@ -59,19 +59,25 @@ The application is a "One Page" layout divided into 6 logical sections:
     *   **Total Project Costs (Costo Total del Proyecto):**
         `Land + Hard + Contingency + Soft + PML Interest + HML Fees (Orig+Mortgage) + HML Interest + Sales Commissions`.
 
-    *   **Developer Profit (Ganancia del Desarrollador):**
+    *   **Project Profit (Ganancia del Proyecto):**
         `Gross Income - Total Project Costs`.
+        *Note:* Renamed from "Ganancia del Desarrollador".
 
     *   **Total Investor Payout (Total a Devolver al Inversionista):**
         `PML Capital + PML Interest`.
 
-    *   **Total HML Payment:**
-        `Loan Principal + Origination + Mortgage Fees + Interest`.
+    *   **Profitability Status:**
+        Display a Success message if Profit > 0, otherwise an Error message.
 
 ## Default Values
 *   Land: $8,000
 *   Hard: $120,000
 *   Soft: $117,000
 *   Contingency: 10%
-*   PML Capital: ~$42,000 (Dynamic based on gap)
+*   PML Capital: Dynamic based on HML Gap.
 *   HML LTC: 85%
+
+## Technical Notes
+*   **Number Formatting:** All currency inputs utilize a helper function to enforce thousands separators and 2 decimal places (e.g., `1,234.56`) upon confirmation.
+*   **Streamlit Cloud:** Uses `st.rerun()` for compatibility.
+*   **Data Types:** Duration inputs use `float` to prevent type errors during session state updates.
