@@ -168,7 +168,7 @@ with c_reset2:
     if st.button("🔄 Reiniciar Valores"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
-        st.experimental_rerun()
+        st.rerun()
 
 # --- SECCIÓN 1: COSTOS DE DESARROLLO ---
 st.markdown('<div class="section-header">1. Costos de Desarrollo</div>', unsafe_allow_html=True)
