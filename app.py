@@ -137,6 +137,8 @@ def update_currency(state_key, widget_key):
         val_float = float(clean_val)
         if val_float < 0: raise ValueError
         st.session_state[state_key] = val_float
+        # Re-format the widget value to ensure consistency
+        st.session_state[widget_key] = f"{val_float:,.2f}"
     except ValueError:
         pass
 
